@@ -1,18 +1,88 @@
 pipeline {
+
+    // Use any available Jenkins agent as the default execution environment.
+    // This agent performs the initial Git checkout and runs pipeline steps
+    // unless a stage overrides it with its own agent.
     agent any
 
+
     stages {
+
         stage('Unit Test - Backend') {
 
-            agent{
-                docker{
+            // This stage runs inside a Docker container instead of directly
+            // on the Jenkins agent.
+            //
+            // Reason:
+            // The Jenkins machine does not need Go installed.
+            // The Docker image provides a predictable Go testing environment.
+            agent {
+                docker {
+
+                    // Custom Docker image created for this project/course.
+                    //
+                    // It contains the tools needed for backend testing:
+                    // - Go 1.21
+                    // - JUnit reporting tools
+                    // - Required build environment
                     image 'snakee/golang-junit:1.21'
+
+
+                    // Important:
+                    // Reuse the existing Jenkins workspace instead of creating
+                    // a separate workspace inside the Docker container.
+                    //
+                    // Without this, Jenkins may perform another checkout or
+                    // the container may not see the files Jenkins already
+                    // downloaded.
                     reuseNode true
                 }
             }
 
+
             steps {
-                dir ('bugtracker-backend'){
+
+                // Change the current working directory.
+                //
+                // The Git repository contains multiple projects:
+                // - frontend
+                // - backend
+                //
+                // The Go module (go.mod) is inside bugtracker-backend,
+                // therefore Go commands must run from this directory.
+                dir('bugtracker-backend') {
+
+
+                    // Run backend unit tests.
+                    //
+                    // GOCACHE:
+                    // Go stores compiled package cache here.
+                    //
+                    // The Docker image runs the container as user 1000:1000.
+                    // The default Go cache location (/ .cache/go-build)
+                    // was not writable, causing:
+                    //
+                    // "permission denied"
+                    //
+                    // Therefore we explicitly use /tmp, which is writable
+                    // inside the container.
+                    //
+                    //
+                    // GOMODCACHE:
+                    // Go downloads external dependencies here.
+                    //
+                    // The default location:
+                    // /go/pkg/mod
+                    //
+                    // was also not writable for the Jenkins user.
+                    //
+                    // We redirect it to /tmp/go-mod-cache.
+                    //
+                    //
+                    // go test:
+                    // -v = verbose output (show every test)
+                    // ./... = run tests in the current module and all
+                    //         sub-packages recursively.
                     sh '''
                         GOCACHE=/tmp/go-build \
                         GOMODCACHE=/tmp/go-mod-cache \
