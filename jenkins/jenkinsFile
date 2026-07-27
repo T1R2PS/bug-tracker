@@ -87,11 +87,32 @@ pipeline {
                         GOMODCACHE=/tmp/go-mod-cache \
                         go test -v ./... 2>&1 | go-junit-report > test-results.xml
                     '''
+                        // Generate the coverage riport
+                            //Generate the coverage
+                            sh 'go test -coverprofile=coverage.out -covermode=atomic ./...'
+
+                            //convert coverage into a html
+                            sh 'go tool cover -html=coverage.out -o coverage.html'
+                            
+                            //create a reports folder
+                            sh 'mkdir -p reports'
+
+                            //remove coverage.html to the newly created reports folder
+                            sh 'mv coverage.html reports/'
+                    '''
+
                 }
             }
             post{
                 always{
                     junit 'bugtracker-backend/test-results.xml'
+
+                
+                    publishFTML target:[
+                        reportDir: 'bugtracker-backend/reports',
+                        reportFiles: 'coverage.html',
+                        reportName: 'Backend Coverage Report'
+                    ]
                 }
             }
         }
