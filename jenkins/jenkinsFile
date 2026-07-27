@@ -85,8 +85,13 @@ pipeline {
                     sh '''
                         GOCACHE=/tmp/go-build \
                         GOMODCACHE=/tmp/go-mod-cache \
-                        go test -v ./...
+                        go test -v ./... 2>&1 | go-junit-report > test-results.xml'
                     '''
+                }
+            }
+            post{
+                always{
+                    junit 'bugtracker-backend/test-results.xml'
                 }
             }
         }
