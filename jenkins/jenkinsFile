@@ -99,8 +99,7 @@ pipeline {
 
                             //remove coverage.html to the newly created reports folder
                             sh 'mv coverage.html reports/'
-                    '''
-
+                                       
                 }
             }
             post{
