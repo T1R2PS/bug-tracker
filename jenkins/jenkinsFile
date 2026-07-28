@@ -96,15 +96,18 @@ pipeline {
                             '''
 
                             //convert coverage into a html
-                            sh 'go tool cover -html=coverage.out -o coverage.html'
-                            
+                            sh '''
+                                GOCACHE=/tmp/go-build \
+                                GOMODCACHE=/tmp/go-mod-cache \
+                                go tool cover -html=coverage.out -o coverage.html
+                            '''
+                                                        
                             //create a reports folder
                             sh 'mkdir -p reports'
 
                             //remove coverage.html to the newly created reports folder
                             sh 'mv coverage.html reports/'
-                                       
-                }
+                                                       }
             }
             post{
                 always{
