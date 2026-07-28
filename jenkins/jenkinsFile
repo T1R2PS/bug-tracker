@@ -94,20 +94,18 @@ pipeline {
                                 GOMODCACHE=/tmp/go-mod-cache \
                                 go test -coverprofile=coverage.out -covermode=atomic ./...
                             '''
-
                             //convert coverage into a html
                             sh '''
                                 GOCACHE=/tmp/go-build \
                                 GOMODCACHE=/tmp/go-mod-cache \
                                 go tool cover -html=coverage.out -o coverage.html
-                            '''
-                                                        
+                            '''                                        
                             //create a reports folder
                             sh 'mkdir -p reports'
 
                             //remove coverage.html to the newly created reports folder
                             sh 'mv coverage.html reports/'
-                                                       }
+                }
             }
             post{
                 always{
@@ -135,12 +133,21 @@ pipeline {
                     sh '''
                         npm ci
                         npm test
+                        
+                        mkdir -p reports
+                        mv coverage reports/
                     '''
                 }
             }
             post {
                 always{
                     junit 'bugtracker-frontend/test-results.xml'
+
+                    publishHTML target:[
+                    reportDir: 'bugtracker-frontend/reports/coverage',
+                    reportFiles: 'index.html',
+                    reportName: 'Frontend Coverage Report'
+                    ]
                 }
             }
         }
