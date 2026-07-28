@@ -6,148 +6,148 @@ pipeline {
     agent any
 
     stages {
+        stage('Execute Unit test parallelly') {
+            parallel{
+                stage('Unit Test - Backend') {
 
-        stage('Unit Test - Backend') {
-
-            // This stage runs inside a Docker container instead of directly
-            // on the Jenkins agent.
-            //
-            // Reason:
-            // The Jenkins machine does not need Go installed.
-            // The Docker image provides a predictable Go testing environment.
-            agent {
-                docker {
-
-                    // Custom Docker image created for this project/course.
+                    // This stage runs inside a Docker container instead of directly
+                    // on the Jenkins agent.
                     //
-                    // It contains the tools needed for backend testing:
-                    // - Go 1.21
-                    // - JUnit reporting tools
-                    // - Required build environment
-                    image 'snakee/golang-junit:1.21'
+                    // Reason:
+                    // The Jenkins machine does not need Go installed.
+                    // The Docker image provides a predictable Go testing environment.
+                    agent {
+                        docker {
 
+                            // Custom Docker image created for this project/course.
+                            //
+                            // It contains the tools needed for backend testing:
+                            // - Go 1.21
+                            // - JUnit reporting tools
+                            // - Required build environment
+                            image 'snakee/golang-junit:1.21'
 
-                    // Important:
-                    // Reuse the existing Jenkins workspace instead of creating
-                    // a separate workspace inside the Docker container.
-                    //
-                    // Without this, Jenkins may perform another checkout or
-                    // the container may not see the files Jenkins already
-                    // downloaded.
-                    reuseNode true
-                }
-            }
+                            // Important:
+                            // Reuse the existing Jenkins workspace instead of creating
+                            // a separate workspace inside the Docker container.
+                            //
+                            // Without this, Jenkins may perform another checkout or
+                            // the container may not see the files Jenkins already
+                            // downloaded.
+                            reuseNode true
+                        }
+                    }
+                    steps {
 
-
-            steps {
-
-                // Change the current working directory.
-                //
-                // The Git repository contains multiple projects:
-                // - frontend
-                // - backend
-                //
-                // The Go module (go.mod) is inside bugtracker-backend,
-                // therefore Go commands must run from this directory.
-                dir('bugtracker-backend') {
+                        // Change the current working directory.
+                        //
+                        // The Git repository contains multiple projects:
+                        // - frontend
+                        // - backend
+                        //
+                        // The Go module (go.mod) is inside bugtracker-backend,
+                        // therefore Go commands must run from this directory.
+                        dir('bugtracker-backend') {
 
 
-                    // Run backend unit tests.
-                    //
-                    // GOCACHE:
-                    // Go stores compiled package cache here.
-                    //
-                    // The Docker image runs the container as user 1000:1000.
-                    // The default Go cache location (/ .cache/go-build)
-                    // was not writable, causing:
-                    //
-                    // "permission denied"
-                    //
-                    // Therefore we explicitly use /tmp, which is writable
-                    // inside the container.
-                    //
-                    //
-                    // GOMODCACHE:
-                    // Go downloads external dependencies here.
-                    //
-                    // The default location:
-                    // /go/pkg/mod
-                    //
-                    // was also not writable for the Jenkins user.
-                    //
-                    // We redirect it to /tmp/go-mod-cache.
-                    //
-                    //
-                    // go test:
-                    // -v = verbose output (show every test)
-                    // ./... = run tests in the current module and all
-                    //         sub-packages recursively.
-                    sh '''
-                        GOCACHE=/tmp/go-build \
-                        GOMODCACHE=/tmp/go-mod-cache \
-                        go test -v ./... 2>&1 | go-junit-report > test-results.xml
-                    '''
-                        // Generate the coverage riport after the same testrun
-                            //Generate the coverage
+                            // Run backend unit tests.
+                            //
+                            // GOCACHE:
+                            // Go stores compiled package cache here.
+                            //
+                            // The Docker image runs the container as user 1000:1000.
+                            // The default Go cache location (/ .cache/go-build)
+                            // was not writable, causing:
+                            //
+                            // "permission denied"
+                            //
+                            // Therefore we explicitly use /tmp, which is writable
+                            // inside the container.
+                            //
+                            //
+                            // GOMODCACHE:
+                            // Go downloads external dependencies here.
+                            //
+                            // The default location:
+                            // /go/pkg/mod
+                            //
+                            // was also not writable for the Jenkins user.
+                            //
+                            // We redirect it to /tmp/go-mod-cache.
+                            //
+                            //
+                            // go test:
+                            // -v = verbose output (show every test)
+                            // ./... = run tests in the current module and all
+                            //         sub-packages recursively.
                             sh '''
                                 GOCACHE=/tmp/go-build \
                                 GOMODCACHE=/tmp/go-mod-cache \
-                                go test -coverprofile=coverage.out -covermode=atomic ./...
+                                go test -v ./... 2>&1 | go-junit-report > test-results.xml
                             '''
-                            //convert coverage into a html
-                            sh '''
-                                GOCACHE=/tmp/go-build \
-                                GOMODCACHE=/tmp/go-mod-cache \
-                                go tool cover -html=coverage.out -o coverage.html
-                            '''                                        
-                            //create a reports folder
-                            sh 'mkdir -p reports'
+                                // Generate the coverage riport after the same testrun
+                                    //Generate the coverage
+                                    sh '''
+                                        GOCACHE=/tmp/go-build \
+                                        GOMODCACHE=/tmp/go-mod-cache \
+                                        go test -coverprofile=coverage.out -covermode=atomic ./...
+                                    '''
+                                    //convert coverage into a html
+                                    sh '''
+                                        GOCACHE=/tmp/go-build \
+                                        GOMODCACHE=/tmp/go-mod-cache \
+                                        go tool cover -html=coverage.out -o coverage.html
+                                    '''                                        
+                                    //create a reports folder
+                                    sh 'mkdir -p reports'
 
-                            //remove coverage.html to the newly created reports folder
-                            sh 'mv coverage.html reports/'
-                }
-            }
-            post{
-                always{
-                    junit 'bugtracker-backend/test-results.xml'
+                                    //remove coverage.html to the newly created reports folder
+                                    sh 'mv coverage.html reports/'
+                        }
+                    }
+                    post{
+                        always{
+                            junit 'bugtracker-backend/test-results.xml'
 
-                
-                    publishHTML target:[
-                        reportDir: 'bugtracker-backend/reports',
-                        reportFiles: 'coverage.html',
-                        reportName: 'Backend Coverage Report'
-                    ]
-                }
-            }
-        }
-
-        stage('Unit Test - Frontend'){
-            agent{
-                docker{
-                    image 'node:20-alpine'
-                    reuseNode true
-                }
-            }
-            steps{
-                dir('bugtracker-frontend'){
-                    sh '''
-                        npm ci
-                        npm test
                         
-                        mkdir -p reports
-                        mv coverage reports/
-                    '''
+                            publishHTML target:[
+                                reportDir: 'bugtracker-backend/reports',
+                                reportFiles: 'coverage.html',
+                                reportName: 'Backend Coverage Report'
+                            ]
+                        }
+                    }
                 }
-            }
-            post {
-                always{
-                    junit 'bugtracker-frontend/test-results.xml'
 
-                    publishHTML target:[
-                    reportDir: 'bugtracker-frontend/reports/coverage',
-                    reportFiles: 'index.html',
-                    reportName: 'Frontend Coverage Report'
-                    ]
+                stage('Unit Test - Frontend'){
+                    agent{
+                        docker{
+                            image 'node:20-alpine'
+                            reuseNode true
+                        }
+                    }
+                    steps{
+                        dir('bugtracker-frontend'){
+                            sh '''
+                                npm ci
+                                npm test
+                                
+                                mkdir -p reports
+                                mv coverage reports/
+                            '''
+                        }
+                    }
+                    post {
+                        always{
+                            junit 'bugtracker-frontend/test-results.xml'
+
+                            publishHTML target:[
+                            reportDir: 'bugtracker-frontend/reports/coverage',
+                            reportFiles: 'index.html',
+                            reportName: 'Frontend Coverage Report'
+                            ]
+                        }
+                    }
                 }
             }
         }
