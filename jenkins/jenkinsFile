@@ -6,7 +6,7 @@ pipeline {
     agent any
 
     stages {
-        stage('Execute Unit test parallelly') {
+        stage('Execute Unit test parallel') {
             parallel{
                 stage('Unit Test - Backend') {
 
@@ -150,6 +150,12 @@ pipeline {
                     }
                 }
             }
+        }
+    }
+        //Cleaning workspaces after all the stages
+    post {
+        always{
+            cleanWs()
         }
     }
 }
