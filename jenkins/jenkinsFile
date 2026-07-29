@@ -153,6 +153,21 @@ pipeline {
                 }
             }
         }
+
+        stage('Launch Applicaton'){
+            agent{
+                docker{
+                    image 'docker:27.5.1'
+                    reuseNode true
+
+                    //sets up docker and give root privileges
+                    args '-v/var/run/docker.sock:/var/run/docker.sock -u 0'
+                }
+            }
+            steps{
+                sh 'docker compose up --build -d'
+            }
+        }
     }
         //Cleaning workspaces after all the stages
     post {
