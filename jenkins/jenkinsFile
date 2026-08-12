@@ -1,118 +1,113 @@
 pipeline {
 
-    // Use any available Jenkins agent as the default execution environment.
-    // This agent performs the initial Git checkout and runs pipeline steps
-    // unless a stage overrides it with its own agent.
+    // Defines where the pipeline will run.
+    // "any" means Jenkins can use any available agent (worker node).
     agent any
 
+    // The pipeline is divided into stages.
+    // Each stage represents one phase of the CI/CD process.
     stages {
- 
-  
+
+        // This stage runs backend and frontend tests simultaneously.
+        // Running in parallel reduces the total build time.
         stage('Execute Unit test parallel') {
-            parallel{
+
+            parallel {
+
+                // ==========================
+                // Backend Unit Tests
+                // ==========================
                 stage('Unit Test - Backend') {
 
-                    // This stage runs inside a Docker container instead of directly
-                    // on the Jenkins agent.
-                    //
-                    // Reason:
-                    // The Jenkins machine does not need Go installed.
-                    // The Docker image provides a predictable Go testing environment.
+                    // Override the global agent for this stage.
+                    // Instead of running directly on Jenkins,
+                    // run inside a Docker container.
                     agent {
                         docker {
 
-                            // Custom Docker image created for this project/course.
-                            //
-                            // It contains the tools needed for backend testing:
-                            // - Go 1.21
-                            // - JUnit reporting tools
-                            // - Required build environment
+                            // Docker image containing Go 1.21
+                            // and the go-junit-report tool.
+                            // Using Docker ensures everyone has
+                            // the same build environment.
                             image 'snakee/golang-junit:1.21'
 
-                            // Important:
-                            // Reuse the existing Jenkins workspace instead of creating
-                            // a separate workspace inside the Docker container.
-                            //
-                            // Without this, Jenkins may perform another checkout or
-                            // the container may not see the files Jenkins already
-                            // downloaded.
+                            // Reuse the existing Jenkins workspace.
+                            // Prevents Jenkins from checking out the
+                            // repository again inside the container.
                             reuseNode true
                         }
                     }
+
                     steps {
 
-                        // Change the current working directory.
-                        //
-                        // The Git repository contains multiple projects:
-                        // - frontend
-                        // - backend
-                        //
-                        // The Go module (go.mod) is inside bugtracker-backend,
-                        // therefore Go commands must run from this directory.
+                        // Change the working directory.
+                        // The Go project (go.mod) is located here,
+                        // so all Go commands must run inside it.
                         dir('bugtracker-backend') {
 
-
-                            // Run backend unit tests.
+                            // Run all backend unit tests.
                             //
                             // GOCACHE:
-                            // Go stores compiled package cache here.
-                            //
-                            // The Docker image runs the container as user 1000:1000.
-                            // The default Go cache location (/ .cache/go-build)
-                            // was not writable, causing:
-                            //
-                            // "permission denied"
-                            //
-                            // Therefore we explicitly use /tmp, which is writable
-                            // inside the container.
-                            //
+                            // Temporary location for compiled packages.
                             //
                             // GOMODCACHE:
-                            // Go downloads external dependencies here.
+                            // Temporary location for downloaded Go modules.
                             //
-                            // The default location:
-                            // /go/pkg/mod
+                            // These locations avoid permission problems
+                            // inside the Docker container.
                             //
-                            // was also not writable for the Jenkins user.
+                            // go test -v ./...
+                            // -v      -> verbose output
+                            // ./...   -> current package and all subpackages
                             //
-                            // We redirect it to /tmp/go-mod-cache.
-                            //
-                            //
-                            // go test:
-                            // -v = verbose output (show every test)
-                            // ./... = run tests in the current module and all
-                            //         sub-packages recursively.
+                            // go-junit-report converts Go output into
+                            // JUnit XML so Jenkins can display test results.
                             sh '''
                                 GOCACHE=/tmp/go-build \
                                 GOMODCACHE=/tmp/go-mod-cache \
                                 go test -v ./... 2>&1 | go-junit-report > test-results.xml
                             '''
-                                // Generate the coverage riport after the same testrun
-                                    //Generate the coverage
-                                    sh '''
-                                        GOCACHE=/tmp/go-build \
-                                        GOMODCACHE=/tmp/go-mod-cache \
-                                        go test -coverprofile=coverage.out -covermode=atomic ./...
-                                    '''
-                                    //convert coverage into a html
-                                    sh '''
-                                        GOCACHE=/tmp/go-build \
-                                        GOMODCACHE=/tmp/go-mod-cache \
-                                        go tool cover -html=coverage.out -o coverage.html
-                                    '''                                        
-                                    //create a reports folder
-                                    sh 'mkdir -p reports'
 
-                                    //remove coverage.html to the newly created reports folder
-                                    sh 'mv coverage.html reports/'
+                            // Run tests again to generate code coverage.
+                            //
+                            // coverage.out contains information about
+                            // which lines of code were executed.
+                            sh '''
+                                GOCACHE=/tmp/go-build \
+                                GOMODCACHE=/tmp/go-mod-cache \
+                                go test -coverprofile=coverage.out -covermode=atomic ./...
+                            '''
+
+                            // Convert the coverage file into an HTML report.
+                            // This produces coverage.html.
+                            sh '''
+                                GOCACHE=/tmp/go-build \
+                                GOMODCACHE=/tmp/go-mod-cache \
+                                go tool cover -html=coverage.out -o coverage.html
+                            '''
+
+                            // Create a directory for reports.
+                            // "-p" means don't fail if it already exists.
+                            sh 'mkdir -p reports'
+
+                            // Move the HTML report into the reports folder.
+                            sh 'mv coverage.html reports/'
                         }
                     }
-                    post{
-                        always{
+
+                    // Runs after this stage finishes,
+                    // even if tests fail.
+                    post {
+                        always {
+
+                            // Publish JUnit test results.
+                            // Jenkins displays passed/failed tests
+                            // and keeps a history across builds.
                             junit 'bugtracker-backend/test-results.xml'
 
-                        
-                            publishHTML target:[
+                            // Publish the HTML coverage report.
+                            // Makes it accessible directly from Jenkins.
+                            publishHTML target: [
                                 reportDir: 'bugtracker-backend/reports',
                                 reportFiles: 'coverage.html',
                                 reportName: 'Backend Coverage Report'
@@ -121,32 +116,58 @@ pipeline {
                     }
                 }
 
-                stage('Unit Test - Frontend'){
-                    agent{
-                        docker{
+                // ==========================
+                // Frontend Unit Tests
+                // ==========================
+                stage('Unit Test - Frontend') {
+
+                    // Run frontend tests inside a Node.js container.
+                    agent {
+                        docker {
+
+                            // Lightweight Node.js image.
                             image 'node:20-alpine'
+
+                            // Reuse Jenkins workspace.
                             reuseNode true
                         }
                     }
-                    steps{
-                        dir('bugtracker-frontend'){
+
+                    steps {
+
+                        // Switch into the frontend project.
+                        dir('bugtracker-frontend') {
+
                             sh '''
+                                # Install dependencies exactly as defined
+                                # in package-lock.json.
+                                # Faster and more reliable than npm install.
                                 npm ci
+
+                                # Execute frontend unit tests.
                                 npm test
-                                
+
+                                # Create reports directory.
                                 mkdir -p reports
+
+                                # Move generated coverage folder
+                                # into the reports directory.
                                 mv coverage reports/
                             '''
                         }
                     }
+
                     post {
-                        always{
+                        always {
+
+                            // Publish frontend JUnit results.
                             junit 'bugtracker-frontend/test-results.xml'
 
-                            publishHTML target:[
-                            reportDir: 'bugtracker-frontend/reports/coverage',
-                            reportFiles: 'index.html',
-                            reportName: 'Frontend Coverage Report'
+                            // Publish frontend HTML coverage report.
+                            publishHTML target: [
+                                reportDir: 'bugtracker-frontend/reports/coverage',
+                                reportFiles: 'index.html',
+                                reportName: 'Frontend Coverage Report'
                             ]
                         }
                     }
@@ -154,24 +175,53 @@ pipeline {
             }
         }
 
-        stage('Launch Applicaton'){
-            agent{
-                docker{
+        // ==========================
+        // Launch Application
+        // ==========================
+        stage('Launch Application') {
+
+            // Use a Docker CLI container.
+            agent {
+                docker {
+
+                    // Image containing the Docker client.
                     image 'docker:27.5.1'
+
                     reuseNode true
 
-                    //sets up docker and give root privileges
-                    args '-v/var/run/docker.sock:/var/run/docker.sock -u 0'
+                    // Extra Docker container arguments.
+                    //
+                    // -v mounts the host Docker socket so the
+                    // Docker CLI inside the container can control
+                    // Docker running on the Jenkins host.
+                    //
+                    // -u 0 runs as the root user to avoid
+                    // permission issues with Docker.
+                    args '-v /var/run/docker.sock:/var/run/docker.sock -u 0'
                 }
             }
-            steps{
+
+            steps {
+
+                // Build images if necessary and start all services
+                // defined in docker-compose.yml.
+                //
+                // --build  -> rebuild images if needed
+                // -d       -> run containers in the background
                 sh 'docker compose up --build -d'
             }
         }
     }
-        //Cleaning workspaces after all the stages
+
+    // Runs after the entire pipeline finishes,
+    // regardless of success or failure.
     post {
-        always{
+        always {
+
+            // Delete the Jenkins workspace.
+            //
+            // Prevents old files from affecting future builds
+            // and frees disk space.
             cleanWs()
         }
     }
