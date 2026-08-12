@@ -211,6 +211,29 @@ pipeline {
                 sh 'docker compose up --build -d'
             }
         }
+
+        // ==========================
+        // Launch API Tests
+        // ==========================
+        stage('Playwright API Tests'){
+            agent{
+                docker{
+                    image 'mcr.microsoft.com/playwright:v1.62.0-noble'
+                    reuseNode true
+                    args'-u 0 --network=host'
+                }
+            }
+            steps{
+                dir('test-api'){
+                    //Wait for 30 sec util the application is ready
+                    sh 'npx wait-port http://localhost:8080/api/health -t 30000' 
+
+                    sh 'npm ci'
+                    sh 'npx playwrith test'
+                }
+            }
+
+        }
     }
 
     // Runs after the entire pipeline finishes,
