@@ -224,7 +224,7 @@ pipeline {
                 }
             }
             steps{
-                dir('test-api'){
+                dir('tests-api'){
 
                     sh 'pwd'
                     sh 'ls -la'
