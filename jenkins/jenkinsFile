@@ -225,11 +225,15 @@ pipeline {
             }
             steps{
                 dir('test-api'){
+
+                    sh 'pwd'
+                    sh 'ls -la'
+                    sh 'ls -la package.json package-lock.json'
                     //Wait for 30 sec util the application is ready
                     sh 'npx wait-port http://localhost:8080/api/health -t 30000' 
 
                     sh 'npm ci'
-                    sh 'npx playwrith test'
+                    sh 'npx playwright test'
                 }
             }
 
