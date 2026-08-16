@@ -262,7 +262,7 @@ pipeline {
                 }
             }
             steps{
-                dir('test-e2e'){
+                dir('tests-e2e'){
                     sh 'pwd'
                     sh 'ls -la'
                     sh 'ls -la package.json package-lock.json'
